@@ -1,0 +1,53 @@
+{
+  "name": "@patchpoint/ui",
+  "version": "0.1.0",
+  "description": "React UI components — ParticleImage animated logo renderer",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./ParticleImage": {
+      "types": "./dist/ParticleImage/index.d.ts",
+      "import": "./dist/ParticleImage/index.js",
+      "require": "./dist/ParticleImage/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "playground": "npm --prefix playground run dev"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "p5": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.8.3"
+  },
+  "sideEffects": false
+}
