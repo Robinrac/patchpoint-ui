@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { applyMobileOverrides } from "./config/mobileOverrides";
 import { resolveParticleImageConfig } from "./config/mergeConfig";
 import { applyQualityCaps, resolveQuality } from "./config/quality";
@@ -121,11 +121,13 @@ export const ParticleImage = React.forwardRef(function ParticleImage(
   const hostRef = useRef<HTMLDivElement | null>(null);
 
   const [mounted, setMounted] = useState(false);
-  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
+  const [measuredBox, setMeasuredBox] = useState<{ w: number; h: number } | null>(null);
   const [viewport, setViewport] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [isMobile, setIsMobile] = useState(false);
   const [breakpoint, setBreakpoint] = useState<"mobile" | "tablet" | "desktop">("desktop");
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot | null>(null);
+  const measuredBoxRef = useRef(measuredBox);
+  measuredBoxRef.current = measuredBox;
 
   // p5 instance + imperative controller (resize fast-path lives on the controller).
   const instanceRef = useRef<{ remove: () => void; noLoop: () => void; loop: () => void } | null>(null);
@@ -226,33 +228,58 @@ export const ParticleImage = React.forwardRef(function ParticleImage(
     };
   }, []);
 
-  // Measure the host width for normal (non-full-viewport, auto-width) layouts,
-  // debounced so a resize drag doesn't trigger a regeneration per frame.
-  useEffect(() => {
-    if (!mounted || fullViewport || width !== undefined) return;
+  // Measure the wrapper's rendered box. Width and height both matter: the parent
+  // may settle into its final height after mount, and the canvas must follow the
+  // actual DOM box instead of a derived aspect-ratio guess.
+  useLayoutEffect(() => {
+    if (!mounted || fullViewport) return;
     const el = containerRef.current;
     if (!el) return;
 
+    let raf = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const update = () => {
-      const next = Math.round(el.clientWidth);
-      setMeasuredWidth((prev) => (prev === next ? prev : next));
+      raf = 0;
+      const rect = el.getBoundingClientRect();
+      const next = { w: Math.round(rect.width), h: Math.round(rect.height) };
+      setMeasuredBox((prev) =>
+        prev && prev.w === next.w && prev.h === next.h ? prev : next,
+      );
+
+      // Keep polling one frame at a time until the host resolves to a non-zero
+      // box. This catches delayed flex/grid sizing after hydration without a
+      // timing-based sleep.
+      if ((next.w <= 0 || next.h <= 0) && containerRef.current) {
+        raf = window.requestAnimationFrame(update);
+      }
     };
     update();
 
     const schedule = () => {
+      if (raf) window.cancelAnimationFrame(raf);
       clearTimeout(timer);
-      timer = setTimeout(update, RESIZE_DEBOUNCE_MS);
+      const last = measuredBoxRef.current;
+      const run = () => {
+        raf = window.requestAnimationFrame(update);
+      };
+      if (!last || last.w <= 0 || last.h <= 0) {
+        run();
+        return;
+      }
+      timer = setTimeout(run, RESIZE_DEBOUNCE_MS);
     };
 
     const ro =
       typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
     ro?.observe(el);
+    window.addEventListener("resize", schedule);
     return () => {
+      if (raf) window.cancelAnimationFrame(raf);
       clearTimeout(timer);
       ro?.disconnect();
+      window.removeEventListener("resize", schedule);
     };
-  }, [mounted, fullViewport, width]);
+  }, [mounted, fullViewport]);
 
   const dims = useMemo(() => {
     if (fullViewport) {
@@ -261,12 +288,15 @@ export const ParticleImage = React.forwardRef(function ParticleImage(
       return { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
     }
     const { canvas } = resolvedConfig;
-    const w =
-      width ?? (measuredWidth && measuredWidth > 0 ? measuredWidth : canvas.defaultSize);
-    const h =
-      height ?? Math.min(Math.round(w * canvas.heightRatio), canvas.maxHeight);
+    const measuredW = measuredBox?.w ?? 0;
+    const measuredH = measuredBox?.h ?? 0;
+    const fallbackW = width ?? (measuredW > 0 ? measuredW : canvas.defaultSize);
+    const fallbackH =
+      height ?? Math.min(Math.round(fallbackW * canvas.heightRatio), canvas.maxHeight);
+    const w = width ?? (measuredW > 0 ? measuredW : fallbackW);
+    const h = height ?? (measuredH > 0 ? measuredH : fallbackH);
     return { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
-  }, [fullViewport, viewport.w, viewport.h, width, height, measuredWidth, resolvedConfig]);
+  }, [fullViewport, viewport.w, viewport.h, width, height, measuredBox, resolvedConfig]);
 
   // Proportional scaling based on the actual rendered canvas size. No-op when
   // `responsive.enabled` is false. Canvas dims are derived above from the
@@ -547,7 +577,11 @@ export const ParticleImage = React.forwardRef(function ParticleImage(
     : {
         position: "relative",
         width: width ?? "100%",
-        height: height ?? dims.h,
+        height,
+        aspectRatio:
+          height === undefined && resolvedConfig.canvas.heightRatio > 0
+            ? `${1 / resolvedConfig.canvas.heightRatio}`
+            : undefined,
         contain: "layout paint style",
         overflow: engineConfig.layout.overflow,
         pointerEvents: effectivePointerEvents,
