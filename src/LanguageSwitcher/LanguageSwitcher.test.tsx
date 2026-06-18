@@ -180,7 +180,6 @@ describe("LanguageSwitcher", () => {
   it("flag images are aria-hidden in trigger", () => {
     const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
     const svgs = container.querySelectorAll("svg");
-    // The trigger flag SVG should be aria-hidden
     const triggerSvg = Array.from(svgs).find(
       (svg) => svg.getAttribute("aria-hidden") === "true",
     );
@@ -193,5 +192,175 @@ describe("LanguageSwitcher", () => {
     // Verify the module loads without Next.js present
     const mod = await import("./LanguageSwitcher");
     expect(typeof mod.LanguageSwitcher).toBe("function");
+  });
+
+  // --- multi-instance SVG ID collision safety ---
+
+  it("multiple instances produce unique clip-path IDs (no DOM ID collisions)", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <LanguageSwitcher value="en" onChange={() => {}} />
+        <LanguageSwitcher value="sv" onChange={() => {}} />
+      </>,
+    );
+    // Open both menus sequentially to force both GbFlag and SeFlag to render
+    const triggers = screen.getAllByRole("button");
+    await user.click(triggers[0]);
+    await user.click(triggers[1]); // opening second closes first (click outside), that's fine
+
+    // Collect all clipPath ids in the document
+    const clipPaths = document.querySelectorAll("clipPath[id]");
+    const ids = Array.from(clipPaths).map((el) => el.id);
+    const unique = new Set(ids);
+    expect(ids.length).toBe(unique.size); // no duplicates
+  });
+
+  it("changing locale updates the rendered flag", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    expect(screen.getByText("EN")).toBeInTheDocument();
+
+    rerender(<LanguageSwitcher value="sv" onChange={() => {}} />);
+    expect(screen.getByText("SV")).toBeInTheDocument();
+    expect(screen.queryByText("EN")).toBeNull();
+  });
+
+  // --- visual correctness (Phase 4) ---
+
+  it("dropdown container has transparent background — no dark panel", async () => {
+    const user = userEvent.setup();
+    render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    await user.click(trigger());
+    const menuEl = menu();
+    expect(menuEl.style.background).toBe("transparent");
+  });
+
+  it("dropdown container has no backdropFilter", async () => {
+    const user = userEvent.setup();
+    render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    await user.click(trigger());
+    const menuEl = menu();
+    expect(menuEl.style.backdropFilter).toBeFalsy();
+    // WebkitBackdropFilter is not in the standard CSSStyleDeclaration type but present at runtime
+    expect((menuEl.style as unknown as Record<string, string>)["WebkitBackdropFilter"]).toBeFalsy();
+  });
+
+  it("dropdown container has no border", async () => {
+    const user = userEvent.setup();
+    render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    await user.click(trigger());
+    const menuEl = menu();
+    expect(menuEl.style.border).toBeFalsy();
+  });
+
+  it("dropdown container has no box-shadow", async () => {
+    const user = userEvent.setup();
+    render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    await user.click(trigger());
+    const menuEl = menu();
+    expect(menuEl.style.boxShadow).toBeFalsy();
+  });
+
+  it("trigger gap and padding are controlled by CSS class, not inline style", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const btn = container.querySelector("button.ppui-lang-trigger") as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    // gap and padding must not appear in inline style (they come from .ppui-lang-trigger CSS)
+    expect(btn.style.gap).toBe("");
+    expect(btn.style.padding).toBe("");
+  });
+
+  it("trigger button does not set font-family (inherits from app)", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const btn = container.querySelector("button") as HTMLButtonElement;
+    expect(btn.style.fontFamily).toBe("");
+  });
+
+  it("label uses ppui-lang-label CSS class (no inline style)", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const label = container.querySelector(".ppui-lang-label") as HTMLElement;
+    expect(label).not.toBeNull();
+    // No inline style attribute on the label span
+    expect(label.getAttribute("style")).toBeFalsy();
+  });
+
+  it("flag uses ppui-lang-flag CSS class with no inline border-radius or flexShrink", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const flag = container.querySelector(".ppui-lang-flag") as SVGElement;
+    expect(flag).not.toBeNull();
+    expect(flag.style.borderRadius).toBe("");
+    expect(flag.style.flexShrink).toBe("");
+  });
+
+  it("chevron uses ppui-lang-chevron CSS class", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const chevron = container.querySelector(".ppui-lang-chevron") as SVGElement;
+    expect(chevron).not.toBeNull();
+  });
+
+  it("chevron is rotated -90deg when closed and 0deg when open", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const chevron = container.querySelector(".ppui-lang-chevron") as SVGElement;
+    expect(chevron.style.transform).toBe("rotate(-90deg)");
+
+    await user.click(trigger());
+    expect(chevron.style.transform).toBe("rotate(0deg)");
+  });
+
+  it("chevron SVG uses strokeWidth 2.5 matching Tabler IconChevronDown", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const chevron = container.querySelector(".ppui-lang-chevron") as SVGElement;
+    expect(chevron.getAttribute("stroke-width")).toBe("2.5");
+  });
+
+  it("chevron path matches Tabler IconChevronDown geometry (M6 9l6 6 6-6)", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const chevron = container.querySelector(".ppui-lang-chevron") as SVGElement;
+    const paths = chevron.querySelectorAll("path");
+    // One invisible bounding path + one visible chevron path
+    const visiblePath = Array.from(paths).find(
+      (p) => p.getAttribute("stroke") !== "none",
+    );
+    expect(visiblePath).toBeTruthy();
+    expect(visiblePath!.getAttribute("d")).toBe("M6 9l6 6 6-6");
+  });
+
+  it("option items have no inline gap, padding, font-size, or letter-spacing (CSS class controls these)", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    await user.click(trigger());
+    // The item button is in the portal, look in document.body
+    const itemBtn = document.querySelector(".ppui-lang-item") as HTMLButtonElement;
+    expect(itemBtn).not.toBeNull();
+    expect(itemBtn.style.gap).toBe("");
+    expect(itemBtn.style.padding).toBe("");
+    expect(itemBtn.style.fontSize).toBe("");
+    expect(itemBtn.style.letterSpacing).toBe("");
+  });
+
+  it("option item inline style only sets border and color", async () => {
+    const user = userEvent.setup();
+    render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    await user.click(trigger());
+    const itemBtn = document.querySelector(".ppui-lang-item") as HTMLButtonElement;
+    expect(itemBtn.style.color).toBe("rgba(255, 255, 255, 0.7)");
+    // border:none normalizes to empty string in jsdom
+    expect(itemBtn.style.borderWidth).toBeFalsy();
+    // font-family must not be set
+    expect(itemBtn.style.fontFamily).toBe("");
+  });
+
+  it("GbFlag has preserveAspectRatio=xMidYMid slice for object-cover behavior", () => {
+    const { container } = render(<LanguageSwitcher value="en" onChange={() => {}} />);
+    const flagSvg = container.querySelector(".ppui-lang-flag") as SVGElement;
+    expect(flagSvg.getAttribute("preserveAspectRatio")).toBe("xMidYMid slice");
+  });
+
+  it("SeFlag has preserveAspectRatio=xMidYMid slice for object-cover behavior", () => {
+    const { container } = render(<LanguageSwitcher value="sv" onChange={() => {}} />);
+    const flagSvg = container.querySelector(".ppui-lang-flag") as SVGElement;
+    expect(flagSvg.getAttribute("preserveAspectRatio")).toBe("xMidYMid slice");
   });
 });

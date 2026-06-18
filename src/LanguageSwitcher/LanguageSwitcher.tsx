@@ -15,7 +15,7 @@ import type { ComponentType, CSSProperties, SVGProps } from "react";
 import type { LanguageSwitcherLocale, LanguageSwitcherProps } from "./types";
 
 // ---------------------------------------------------------------------------
-// One-time style injection for pseudo-class states that can't use inline styles
+// One-time style injection — responsive pseudo-class and breakpoint styles
 // ---------------------------------------------------------------------------
 
 const STYLE_ID = "ppui-lang-switcher";
@@ -30,11 +30,26 @@ function injectStyles(): void {
   const el = document.createElement("style");
   el.id = STYLE_ID;
   el.textContent = [
-    `.ppui-lang-trigger{outline:none;-webkit-tap-highlight-color:transparent}`,
-    `.ppui-lang-trigger:focus-visible{outline:2px solid rgba(255,255,255,0.25);outline-offset:2px}`,
-    `.ppui-lang-item{outline:none;background:transparent;-webkit-tap-highlight-color:transparent}`,
-    `.ppui-lang-item:hover{color:rgba(255,255,255,1)!important}`,
+    // Trigger — responsive gap/padding; focus ring as box-shadow (matches SkillTap ring-2 ring-white/20)
+    `.ppui-lang-trigger{gap:4px;padding:0 4px;outline:none;-webkit-tap-highlight-color:transparent;transition:color 150ms,background-color 150ms,border-color 150ms}`,
+    `.ppui-lang-trigger:focus-visible{box-shadow:0 0 0 2px rgba(255,255,255,0.2);outline:none}`,
+    `.ppui-lang-trigger:active{filter:brightness(0.9)}`,
+    // Flag — responsive sizes matching SkillTap w-6/sm:w-7/md:w-9 h-[18px]/sm:h-[21px]/md:h-[27px]
+    `.ppui-lang-flag{width:24px;height:18px;border-radius:4px;display:block;flex-shrink:0;overflow:hidden}`,
+    // Label — hidden on mobile (matches SkillTap hidden sm:inline)
+    `.ppui-lang-label{display:none;color:#fff;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.025em;line-height:1}`,
+    // Option label — display toggle only; color/font inherit from .ppui-lang-item
+    `.ppui-lang-item-label{display:none}`,
+    // Chevron — responsive sizes matching SkillTap w-3.5/sm:w-4/md:w-5
+    `.ppui-lang-chevron{width:14px;height:14px;flex-shrink:0;transition:transform 150ms;color:#fff}`,
+    // Option items — responsive gap/padding/font-size matching SkillTap
+    `.ppui-lang-item{display:flex;align-items:center;gap:6px;padding:8px;border-radius:8px;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.025em;outline:none;background:transparent;-webkit-tap-highlight-color:transparent;transition:color 150ms,background-color 150ms;width:100%;box-sizing:border-box;cursor:pointer}`,
+    `.ppui-lang-item:hover{color:#fff!important}`,
     `.ppui-lang-item:focus-visible{background:rgba(255,255,255,0.08);outline:none}`,
+    // sm: 640px+
+    `@media(min-width:640px){.ppui-lang-trigger{gap:8px;padding:0 6px}.ppui-lang-flag{width:28px;height:21px}.ppui-lang-label{display:inline}.ppui-lang-item-label{display:inline}.ppui-lang-chevron{width:16px;height:16px}.ppui-lang-item{gap:8px;padding:10px}}`,
+    // md: 768px+
+    `@media(min-width:768px){.ppui-lang-trigger{gap:10px}.ppui-lang-flag{width:36px;height:27px}.ppui-lang-label{font-size:.875rem}.ppui-lang-chevron{width:20px;height:20px}.ppui-lang-item{gap:12px;padding:10px 12px;font-size:1rem}}`,
   ].join("\n");
   document.head.appendChild(el);
   _stylesInjected = true;
@@ -57,24 +72,32 @@ const LOCALES: LocaleEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Internal chevron icon
+// Internal chevron — matches Tabler IconChevronDown path and stroke exactly
 // ---------------------------------------------------------------------------
 
-function ChevronDown({ style }: { style?: CSSProperties }) {
+function ChevronDown({
+  style,
+  className,
+}: {
+  style?: CSSProperties;
+  className?: string;
+}) {
   return (
     <svg
-      width="16"
-      height="16"
       viewBox="0 0 24 24"
+      width="20"
+      height="20"
       fill="none"
       stroke="currentColor"
       strokeWidth={2.5}
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden
+      aria-hidden={true}
+      className={className}
       style={style}
     >
-      <polyline points="6 9 12 15 18 9" />
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M6 9l6 6 6-6" />
     </svg>
   );
 }
@@ -90,6 +113,10 @@ export function LanguageSwitcher({
   ariaLabel = "Select language",
   disabled = false,
 }: LanguageSwitcherProps) {
+  // Inject styles synchronously during render so CSS is present before paint.
+  // Idempotent — safe to call on every render and in React StrictMode.
+  injectStyles();
+
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = `ppui-lang-${useId().replace(/:/g, "")}`;
@@ -99,10 +126,6 @@ export function LanguageSwitcher({
     width: number;
     height: number;
   } | null>(null);
-
-  useEffect(() => {
-    injectStyles();
-  }, []);
 
   const current = LOCALES.find((l) => l.value === value) ?? LOCALES[0];
 
@@ -172,40 +195,24 @@ export function LanguageSwitcher({
           display: "flex",
           alignItems: "center",
           minHeight: 40,
-          gap: 8,
-          padding: "0 6px",
           border: "none",
           background: "transparent",
           cursor: disabled ? "not-allowed" : "pointer",
           borderRadius: 8,
           opacity: disabled ? 0.5 : 1,
-          color: "rgba(255,255,255,0.9)",
+          color: "#ffffff",
         }}
       >
         <current.Flag
+          className="ppui-lang-flag"
           width={36}
           height={27}
-          style={{ borderRadius: 4, flexShrink: 0, display: "block" }}
           aria-hidden={true}
         />
-        <span
-          style={{
-            color: "#ffffff",
-            fontSize: 12,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            lineHeight: 1,
-          }}
-        >
-          {current.shortLabel}
-        </span>
+        <span className="ppui-lang-label">{current.shortLabel}</span>
         <ChevronDown
-          style={{
-            flexShrink: 0,
-            transform: open ? "rotate(0deg)" : "rotate(-90deg)",
-            transition: "transform 150ms",
-          }}
+          className="ppui-lang-chevron"
+          style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
         />
       </button>
 
@@ -221,12 +228,15 @@ export function LanguageSwitcher({
               position: "fixed",
               top: rect.top + rect.height + 6,
               left: rect.left,
-              minWidth: 130,
+              width:
+                typeof window !== "undefined" && window.innerWidth < 640
+                  ? Math.max(rect.width + 12, 68)
+                  : window.innerWidth < 768
+                    ? 130
+                    : 168,
               zIndex: 9999,
-              background: "rgba(10, 7, 34, 0.88)",
-              backdropFilter: "blur(16px)",
-              WebkitBackdropFilter: "blur(16px)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
+              background: "transparent",
+              overflow: "hidden",
               borderRadius: 12,
               padding: 6,
               display: "flex",
@@ -248,34 +258,22 @@ export function LanguageSwitcher({
                   }}
                   aria-label={loc.label}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "8px 12px",
-                    borderRadius: 8,
                     border: "none",
-                    cursor: "pointer",
-                    width: "100%",
                     color: "rgba(255,255,255,0.7)",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    boxSizing: "border-box",
                   }}
                 >
                   <loc.Flag
+                    className="ppui-lang-flag"
                     width={36}
                     height={27}
-                    style={{ borderRadius: 4, flexShrink: 0, display: "block" }}
                     aria-hidden={true}
                   />
-                  <span>{loc.shortLabel}</span>
+                  <span className="ppui-lang-item-label">{loc.shortLabel}</span>
                 </button>
               </li>
             ))}
           </ul>,
-          document.body
+          document.body,
         )}
     </div>
   );

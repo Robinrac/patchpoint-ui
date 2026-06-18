@@ -9,6 +9,7 @@ export function SeFlag(props: SVGProps<SVGSVGElement>) {
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 10"
+      preserveAspectRatio="xMidYMid slice"
       {...props}
     >
       <rect width="16" height="10" fill="#005293" />
