@@ -1,7 +1,6 @@
-// Root barrel. Re-exports the full ParticleImage public surface so that
+// Root barrel. Re-exports the full public surface of every component so that
 //   import { X } from "@patchpoint/ui"
-// and
-//   import { X } from "@patchpoint/ui/ParticleImage"
-// expose exactly the same members. Keep these in parity — the subpath entry
-// (./ParticleImage) is the single source of truth for what is public.
+// is equivalent to importing from the individual subpath entries.
+// Keep subpath entries and this file in parity.
 export * from "./ParticleImage";
+export * from "./LanguageSwitcher";

@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     "ParticleImage/index": "src/ParticleImage/index.ts",
+    "LanguageSwitcher/index": "src/LanguageSwitcher/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,
